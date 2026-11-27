@@ -386,7 +386,7 @@ function BookingWizard() {
   };
 
   /* ── Razorpay booking ── */
-  const handleSubmit = async () => {
+ const handleSubmit = async () => {
     if (!user) {
       pushToast("Please login to complete your booking", "error");
       return router.push("/login");
@@ -395,26 +395,34 @@ function BookingWizard() {
       pushToast("Please fill all details and agree to terms", "error");
       return;
     }
+    if (typeof window === "undefined" || !window.Razorpay) {
+      pushToast("Payment gateway is still loading. Please try again.", "error");
+      return;
+    }
 
     setSubmitting(true);
 
     try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("avenue_token") : null;
+
       const { data: orderData } = await axios.post(
         `${API_URL}/bookings/order`,
         { amount: total },
         {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("avenue_token")}`,
-          },
+          timeout: 10000,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
       );
 
-      if (!orderData.success) throw new Error("Could not create payment order");
+      if (!orderData?.success || !orderData?.order?.id) {
+        throw new Error(orderData?.message || "Could not create payment order");
+      }
 
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.order.amount,
-        currency: orderData.order.currency,
+        currency: orderData.order.currency || "INR",
         name: "Avenue Longevity Retreat",
         description: `Booking for ${selectedService.title}`,
         order_id: orderData.order.id,
@@ -430,7 +438,7 @@ function BookingWizard() {
               time: selectedTime,
               guests,
               originalAmount: subtotal,
-              discountAmount: discountAmount,
+              discountAmount,
               couponCode: appliedCoupon?.code || null,
               totalAmount: total,
             };
@@ -444,39 +452,51 @@ function BookingWizard() {
                 bookingDetails,
               },
               {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem(
-                    "avenue_token"
-                  )}`,
-                },
+                timeout: 10000,
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
               }
             );
 
-            if (verifyData.success) {
+            if (verifyData?.success && verifyData?.booking?._id) {
               setBookingRef(verifyData.booking._id.slice(-6).toUpperCase());
               setSuccess(true);
+            } else {
+              throw new Error(verifyData?.message || "Verification failed");
             }
           } catch (error) {
             pushToast(
-              "Payment verification failed. Please contact support.",
+              error.response?.data?.message ||
+                "Payment verification failed. Please contact support.",
               "error"
             );
           } finally {
             setSubmitting(false);
           }
         },
+        modal: {
+          ondismiss: function () {
+            setSubmitting(false);
+            pushToast("Payment cancelled", "error");
+          },
+        },
         prefill: { name, email, contact: phone },
         theme: { color: "#C9944A" },
       };
 
       const rzp = new window.Razorpay(options);
-      rzp.on("payment.failed", function () {
-        pushToast("Payment failed. Please try again.", "error");
+      rzp.on("payment.failed", function (resp) {
+        pushToast(
+          resp?.error?.description || "Payment failed. Please try again.",
+          "error"
+        );
         setSubmitting(false);
       });
       rzp.open();
     } catch (error) {
-      pushToast(error.response?.data?.message || error.message, "error");
+      pushToast(
+        error.response?.data?.message || error.message || "Could not start payment",
+        "error"
+      );
       setSubmitting(false);
     }
   };
