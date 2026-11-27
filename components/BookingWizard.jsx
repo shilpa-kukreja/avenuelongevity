@@ -48,7 +48,7 @@ const timeSlots = [
   { time: "09:00 AM", status: "available" },
   { time: "10:30 AM", status: "available" },
   { time: "12:00 PM", status: "limited" },
-  { time: "01:30 PM", status: "full" },
+  { time: "01:30 PM", status: "limited" },
   { time: "03:00 PM", status: "available" },
   { time: "04:30 PM", status: "limited" },
   { time: "06:00 PM", status: "available" },
