@@ -8,16 +8,29 @@ const formatUSD = (value) => {
   })}`;
 };
 
-const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
+let transporter = null;
+
+const getTransporter = () => {
+  if (transporter) return transporter;
+
+  transporter = nodemailer.createTransport({
     service: "Gmail",
     auth: {
       user: process.env.SMTP_EMAIL,
       pass: process.env.SMTP_PASSWORD,
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
 
-  let subject = "";
+  return transporter;
+};
+
+const sendEmail = async (options = {}) => {
+  const mailer = getTransporter();
+
+  let subject = "Avenue Longevity Retreat";
   let htmlContent = "";
 
   // 1. Password Reset Email
@@ -31,7 +44,24 @@ const sendEmail = async (options) => {
     `;
   }
 
-  // 2. Booking Confirmation Email
+  // 2. Email OTP Verification
+  if (options.type === "email_otp") {
+    subject = `${options.otp} is your Avenue Longevity Retreat verification code`;
+    htmlContent = `
+      <h2 style="font-family: serif; font-weight: normal; color: #F5F0E8;">Verify Your Email</h2>
+      <p style="color: #A89C8C; font-size: 14px; line-height: 1.6;">
+        Hi ${options.name || "Guest"}, enter this 6-digit code to activate your account:
+      </p>
+      <div style="margin: 24px 0; padding: 16px; text-align: center; background: #1A1C18; border: 1px solid #C9944A66; border-radius: 12px; font-family: monospace; font-size: 30px; letter-spacing: 8px; color: #C9944A; font-weight: bold;">
+        ${options.otp}
+      </div>
+      <p style="color: #A89C8C; font-size: 12px;">
+        This code expires in 10 minutes. If you didn’t request this, you can safely ignore this email.
+      </p>
+    `;
+  }
+
+  // 3. Booking Confirmation Email
   if (options.type === "booking_confirm") {
     const b = options.booking;
     subject = `Booking Confirmed: ${b.serviceName} - Avenue Longevity`;
@@ -51,7 +81,7 @@ const sendEmail = async (options) => {
     `;
   }
 
-  // 3. Status Update Email
+  // 4. Status Update Email
   if (options.type === "status_update") {
     const b = options.booking;
     subject = `Booking Update: ${b.status} - Avenue Longevity`;
@@ -62,7 +92,7 @@ const sendEmail = async (options) => {
     `;
   }
 
-  // 4. Purchase Receipt (Packages & Memberships)
+  // 5. Purchase Receipt (Packages & Memberships)
   if (options.type === "purchase_receipt") {
     const t = options.transaction;
     subject = `Receipt for your ${t.itemType} purchase - Avenue Longevity`;
@@ -81,7 +111,7 @@ const sendEmail = async (options) => {
     `;
   }
 
-   // 5. Contact Form - Admin Notification
+  // 6. Contact Form - Admin Notification
   if (options.type === "contact_admin") {
     const m = options.message;
     subject = `New Inquiry: ${m.subject} from ${m.name}`;
@@ -91,7 +121,7 @@ const sendEmail = async (options) => {
       <div style="background: #1A1C18; padding: 20px; border-radius: 10px; margin: 20px 0; text-align: left;">
         <p style="margin: 5px 0; color: white;"><strong>Name:</strong> ${m.name}</p>
         <p style="margin: 5px 0; color: white;"><strong>Email:</strong> ${m.email}</p>
-        <p style="margin: 5px 0; color: white;"><strong>Phone:</strong> ${m.phone || 'N/A'}</p>
+        <p style="margin: 5px 0; color: white;"><strong>Phone:</strong> ${m.phone || "N/A"}</p>
         <p style="margin: 5px 0; color: white;"><strong>Subject:</strong> ${m.subject}</p>
         <hr style="border-color: #333; margin: 15px 0;" />
         <p style="color: #E3D9C9; font-style: italic;">"${m.message}"</p>
@@ -100,7 +130,7 @@ const sendEmail = async (options) => {
     `;
   }
 
-  // 6. Contact Form - User Confirmation
+  // 7. Contact Form - User Confirmation
   if (options.type === "contact_user") {
     const m = options.message;
     subject = "We received your inquiry - Avenue Longevity";
@@ -115,9 +145,8 @@ const sendEmail = async (options) => {
     `;
   }
 
-
- // 7. Subscriber - Admin Notification (FIXED TYPO)
-  if(options.type === "subscriber_admin") {
+  // 8. Subscriber - Admin Notification
+  if (options.type === "subscriber_admin") {
     const s = options.subscriber;
     subject = `New Subscriber: ${s.email}`;
     htmlContent = `
@@ -128,10 +157,9 @@ const sendEmail = async (options) => {
       </div>
     `;
   }
-  
-  // 8. Subscriber - User Confirmation (FIXED TYPO)
-  if(options.type === "subscriber_user") {
-    const s = options.subscriber;
+
+  // 9. Subscriber - User Confirmation
+  if (options.type === "subscriber_user") {
     subject = "Thank you for subscribing - Avenue Longevity";
     htmlContent = `
       <h2 style="font-family: serif; font-weight: normal; color: #F5F0E8;">Subscription Confirmed</h2>
@@ -139,12 +167,13 @@ const sendEmail = async (options) => {
     `;
   }
 
-
+  const fromName = process.env.FROM_NAME || "Avenue Longevity Retreat";
+  const fromEmail = process.env.FROM_EMAIL || process.env.SMTP_EMAIL;
 
   const message = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    from: `${fromName} <${fromEmail}>`,
     to: options.email,
-    subject: subject,
+    subject,
     html: `
       <div style="background-color: #080906; color: #ffffff; font-family: sans-serif; padding: 40px; text-align: center;">
         <h1 style="color: #C9944A; font-family: serif; font-weight: normal;">AVENUE</h1>
@@ -156,8 +185,7 @@ const sendEmail = async (options) => {
     `,
   };
 
-
-  await transporter.sendMail(message);
+  await mailer.sendMail(message);
 };
 
 export default sendEmail;

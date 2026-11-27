@@ -47,9 +47,15 @@ export const AuthProvider = ({ children }) => {
       router.push(redirectPath); // <-- Use the dynamic path
       return { success: true, role: data.role };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || "Login failed" };
-    }
+   return {
+    success: false,
+    requiresVerification: Boolean(error.response?.data?.requiresVerification),
+    message: error.response?.data?.message || "Login failed",
   };
+}
+  }
+
+   
 
   // REGISTER
   const register = async (name, email, password, phone) => {

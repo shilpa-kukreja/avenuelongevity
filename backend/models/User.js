@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -25,6 +24,7 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
+      trim: true,
     },
 
     avatar: {
@@ -56,11 +56,30 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Email OTP Verification fields
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailOtpHash: {
+      type: String,
+    },
+    emailOtpExpire: {
+      type: Date,
+    },
+    emailOtpLastSentAt: {
+      type: Date,
+    },
+    emailOtpAttempts: {
+      type: Number,
+      default: 0,
+    },
+
+    // Password Reset fields (matched to controller)
     resetPasswordToken: {
       type: String,
     },
-
-    resetPasswordExpires: {
+    resetPasswordExpire: {
       type: Date,
     },
   },
@@ -69,7 +88,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Password hashing middleware
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) {
     return;
@@ -79,7 +97,6 @@ userSchema.pre("save", async function () {
   this.password = await bcrypt.hash(this.password, salt);
 });
 
-// Compare password
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
