@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import Transaction from "../models/Transaction.js";
 import User from "../models/User.js";
-import Coupon from "../models/Coupon.js"; // ← add if you have this model
+import Coupon from "../models/Coupon.js";
 import { razorpayInstance } from "../utils/razorpay.js";
 import sendEmail from "../utils/sendEmail.js";
 
@@ -10,18 +10,24 @@ import sendEmail from "../utils/sendEmail.js";
 // @access  Private
 export const createTransactionOrder = async (req, res) => {
   try {
-    const { amount } = req.body;
+    const amount = Number(req.body.amount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid order amount" });
+    }
 
     const options = {
-      amount: Math.round(Number(amount) * 100), // paise
+      amount: Math.round(amount * 100), // paise
       currency: "INR",
       receipt: `txn_${Date.now()}`,
     };
 
     const order = await razorpayInstance.orders.create(options);
-    res.status(200).json({ success: true, order });
+    return res.status(200).json({ success: true, order });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -44,7 +50,7 @@ export const verifyTransactionAndSave = async (req, res) => {
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
+      .update(body)
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
@@ -80,7 +86,6 @@ export const verifyTransactionAndSave = async (req, res) => {
         .json({ success: false, message: "Invalid cart total" });
     }
 
-    // Sanitize cart-level amounts (never exceed subtotal, never negative)
     const safeDiscount = Math.min(
       Math.max(Number(discountAmount) || 0, 0),
       subtotal
@@ -99,8 +104,6 @@ export const verifyTransactionAndSave = async (req, res) => {
       const itemSubtotal = (Number(item.price) || 0) * qty;
       const share = itemSubtotal / subtotal;
 
-      // Distribute discount + tax proportionally.
-      // The LAST item absorbs any rounding remainder so the sum stays exact.
       const itemDiscount = isLast
         ? safeDiscount - allocatedDiscount
         : Math.round(safeDiscount * share);
@@ -118,7 +121,7 @@ export const verifyTransactionAndSave = async (req, res) => {
       );
 
       const billingCycle = item.billing
-        ? item.billing === "yearly"
+        ? item.billing === "yearly" || item.billing === "annual"
           ? "Yearly"
           : "Monthly"
         : "None";
@@ -127,24 +130,18 @@ export const verifyTransactionAndSave = async (req, res) => {
         user: user._id,
         customerName: user.name,
         customerEmail: user.email,
-
         itemType: item.type === "membership" ? "Membership" : "Package",
         itemName: item.name,
-
-        // ✅ NOW stores real amounts
         originalAmount: itemSubtotal,
         discountAmount: itemDiscount,
-        couponCode: couponCode || null,
+        couponCode: couponCode ? String(couponCode).trim().toUpperCase() : null,
         amount: itemFinalAmount,
-
         paymentStatus: "Paid",
         razorpayOrderId: razorpay_order_id,
         razorpayPaymentId: razorpay_payment_id,
-
         billingCycle,
       };
 
-      // Compute renewal for membership
       if (billingCycle === "Yearly" || billingCycle === "Monthly") {
         const renewal = new Date();
         if (billingCycle === "Yearly") {
@@ -160,48 +157,44 @@ export const verifyTransactionAndSave = async (req, res) => {
 
       /* ── 5. Update user based on item type ── */
       if (item.type === "membership") {
-        user.membershipTier = item.name
+        user.membershipTier = String(item.name || "")
           .replace(/ Membership$/i, "")
           .trim();
         user.membershipStatus = "Active";
       } else if (item.type === "package") {
         user.credits =
-          (user.credits || 0) + (Number(item.sessions) || 0) * qty;
+          (Number(user.credits) || 0) + (Number(item.sessions) || 0) * qty;
       }
     }
 
     await user.save();
 
-    /* ── 6. Increment coupon usage (optional) ── */
-    if (couponCode && Coupon) {
-      try {
-        await Coupon.updateOne(
-          { code: couponCode },
-          { $inc: { usedCount: 1 } }
-        );
-      } catch (couponErr) {
-        console.log("Coupon usage increment failed:", couponErr.message);
-      }
-    }
-
-    /* ── 7. Send receipt email ── */
-    try {
-      await sendEmail({
-        email: user.email,
-        type: "purchase_receipt",
-        transaction: createdTransactions[0],
-      });
-    } catch (err) {
-      console.log("Email could not be sent", err);
-    }
-
+    /* ── 6. Respond immediately so checkout finishes fast ── */
     res.status(200).json({
       success: true,
       transactions: createdTransactions,
     });
+
+    /* ── 7. Background tasks: coupon usage & receipt email ── */
+    if (couponCode && Coupon) {
+      Coupon.updateOne(
+        { code: String(couponCode).trim().toUpperCase() },
+        { $inc: { usedCount: 1 } }
+      ).catch((couponErr) => {
+        console.log("Coupon usage increment failed:", couponErr.message);
+      });
+    }
+
+    sendEmail({
+      email: user.email,
+      type: "purchase_receipt",
+      transaction: createdTransactions[0],
+    }).catch((err) => {
+      console.log("Email could not be sent:", err.message);
+    });
   } catch (error) {
     console.error("verifyTransactionAndSave error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -213,9 +206,9 @@ export const getAllTransactions = async (req, res) => {
     const transactions = await Transaction.find({})
       .populate("user", "name email")
       .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, transactions });
+    return res.status(200).json({ success: true, transactions });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -227,8 +220,8 @@ export const getMyTransactions = async (req, res) => {
     const transactions = await Transaction.find({ user: req.user._id }).sort({
       createdAt: -1,
     });
-    res.status(200).json({ success: true, transactions });
+    return res.status(200).json({ success: true, transactions });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
