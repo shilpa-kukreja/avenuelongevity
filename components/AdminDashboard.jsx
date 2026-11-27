@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
-import { useRouter} from "next/navigation";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import {
   CalendarDays,
@@ -96,8 +96,24 @@ const buildRealChartSeries = (period, bookings, transactions) => {
   // "This Week" (Monday through Sunday)
   const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
   const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
-  const sundayEnd = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 23, 59, 59, 999);
+  const monday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + diffToMonday,
+    0,
+    0,
+    0,
+    0
+  );
+  const sundayEnd = new Date(
+    monday.getFullYear(),
+    monday.getMonth(),
+    monday.getDate() + 6,
+    23,
+    59,
+    59,
+    999
+  );
 
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const buckets = dayLabels.map((label) => ({
@@ -117,19 +133,6 @@ const buildRealChartSeries = (period, bookings, transactions) => {
 
   return buckets;
 };
-
-
-// Inside AdminDashboardContent:
-const router = useRouter();
-const tabFromQuery = searchParams.get("tab");
-
-useEffect(() => {
-  if (tabFromQuery === "coupons") {
-    router.replace("/admin/coupons");
-    return;
-  }
-  if (tabFromQuery) setActiveTab(tabFromQuery);
-}, [tabFromQuery, router]);
 
 const mockCustomers = [
   { id: "U-001", name: "Elena Rodriguez", email: "elena@example.com", tier: "Signature", joined: "Jan 2024", spent: "$12,400", status: "Active" },
@@ -375,6 +378,7 @@ function RevenueAreaChart({ period, data, activeIndex, setActiveIndex }) {
 }
 
 function AdminDashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabFromQuery = searchParams.get("tab");
 
@@ -388,8 +392,12 @@ function AdminDashboardContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (tabFromQuery === "coupons") {
+      router.replace("/admin/coupons");
+      return;
+    }
     if (tabFromQuery) setActiveTab(tabFromQuery);
-  }, [tabFromQuery]);
+  }, [tabFromQuery, router]);
 
   useEffect(() => {
     let active = true;
