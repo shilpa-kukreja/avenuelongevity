@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import {
   Search, Menu, MapPin, Phone, Mail, User as UserIcon, X, ArrowRight,
 } from "lucide-react";
@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../app/contexts/AuthContext";
 
-export default function Navbar() {
+function NavbarContent() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, loading } = useAuth();
@@ -400,5 +400,14 @@ export default function Navbar() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+
+export default function Navbar() {
+  return (
+    <Suspense fallback={null}>
+      <NavbarContent />
+    </Suspense>
   );
 }
