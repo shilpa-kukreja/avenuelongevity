@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import CartDrawer from "@/components/CartDrawer";
 import CartToasts from "@/components/CartToasts";
 
-const CartContext = createContext(null);
+export const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const [cart, setCart] = useState([]);
@@ -12,34 +12,38 @@ export function CartProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const [hydrated, setHydrated] = useState(false);
 
-  // Load from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("avenue-cart");
-      if (saved) setCart(JSON.parse(saved));
+      const saved = window.localStorage.getItem("avenue-cart");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setCart(parsed);
+      }
     } catch (e) {}
     setHydrated(true);
   }, []);
 
-  // Persist to localStorage on changes
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem("avenue-cart", JSON.stringify(cart));
+      window.localStorage.setItem("avenue-cart", JSON.stringify(cart));
     } catch (e) {}
   }, [cart, hydrated]);
 
-  // Lock body scroll when drawer is open
   useEffect(() => {
-    if (isOpen) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "";
-    return () => { document.body.style.overflow = ""; };
-  }, [isOpen]);
+    if (!hydrated) return;
+    document.body.style.overflow = isOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen, hydrated]);
 
   const pushToast = useCallback((message, type = "success") => {
-    const id = Date.now() + Math.random();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000);
+    setTimeout(() => {
+      setToasts((t) => t.filter((x) => x.id !== id));
+    }, 3000);
   }, []);
 
   const dismissToast = useCallback((id) => {
@@ -86,30 +90,36 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => setCart([]), []);
 
-  const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
-  const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
+  const cartCount = useMemo(() => cart.reduce((s, i) => s + (Number(i.qty) || 0), 0), [cart]);
+  const cartTotal = useMemo(
+    () => cart.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 0), 0),
+    [cart]
+  );
 
-  const value = {
-    cart,
-    cartCount,
-    cartTotal,
-    addToCart,
-    removeFromCart,
-    updateQty,
-    clearCart,
-    isOpen,
-    openCart: () => setIsOpen(true),
-    closeCart: () => setIsOpen(false),
-    toasts,
-    pushToast,
-    dismissToast,
-  };
+  const value = useMemo(
+    () => ({
+      cart,
+      cartCount,
+      cartTotal,
+      addToCart,
+      removeFromCart,
+      updateQty,
+      clearCart,
+      isOpen,
+      openCart: () => setIsOpen(true),
+      closeCart: () => setIsOpen(false),
+      toasts,
+      pushToast,
+      dismissToast,
+    }),
+    [cart, cartCount, cartTotal, addToCart, removeFromCart, updateQty, clearCart, isOpen, toasts, pushToast, dismissToast]
+  );
 
   return (
     <CartContext.Provider value={value}>
       {children}
-      <CartDrawer />
-      <CartToasts />
+      {hydrated && <CartDrawer />}
+      {hydrated && <CartToasts />}
     </CartContext.Provider>
   );
 }

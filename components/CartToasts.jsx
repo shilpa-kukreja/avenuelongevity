@@ -9,11 +9,12 @@ const easeOut = [0.22, 1, 0.36, 1];
 
 export default function CartToasts() {
   const { toasts, dismissToast } = useCart();
+  const safeToasts = Array.isArray(toasts) ? toasts : [];
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] flex flex-col gap-2 items-center pointer-events-none">
       <AnimatePresence>
-        {toasts.map((t) => (
+        {safeToasts.map((t) => (
           <motion.div
             key={t.id}
             initial={{ opacity: 0, y: 30, scale: 0.9 }}
@@ -27,8 +28,10 @@ export default function CartToasts() {
               {t.message}
             </span>
             <button
+              type="button"
               onClick={() => dismissToast(t.id)}
               className="text-white/40 hover:text-white ml-1"
+              aria-label="Dismiss notification"
             >
               <X size={12} />
             </button>

@@ -213,59 +213,62 @@ export default function ServiceDetailClient({ slug }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const fetchServiceDetail = useCallback(async () => {
-    if (!slug) {
-      setError("Missing service slug.");
-      setLoading(false);
-      return;
-    }
+const fetchServiceDetail = useCallback(async () => {
+  if (!slug) {
+    setError("Missing service slug.");
+    setLoading(false);
+    return;
+  }
 
-    setLoading(true);
-    setError("");
+  setLoading(true);
+  setError("");
 
-    try {
-      const allRes = await fetch(`${API_BASE}/services?limit=100`);
-      const allJson = await allRes.json().catch(() => ({}));
-      if (!allRes.ok) {
-        throw new Error(
-          allJson?.message || `Failed to load services (${allRes.status})`
-        );
-      }
-
-      const allServices = Array.isArray(allJson)
-        ? allJson
-        : allJson?.data || allJson?.services || [];
-
-      let rawDoc = allServices.find(
-        (item) => item?.slug === slug || item?._id === slug
+  try {
+    const allRes = await fetch(`${API_BASE}/services?limit=100`, {
+      cache: "no-store",
+    });
+    const allJson = await allRes.json().catch(() => ({}));
+    if (!allRes.ok) {
+      throw new Error(
+        allJson?.message || `Failed to load services (${allRes.status})`
       );
-
-      if (!rawDoc) {
-        const singleRes = await fetch(
-          `${API_BASE}/services/${encodeURIComponent(slug)}`
-        );
-        const singleJson = await singleRes.json().catch(() => ({}));
-        if (!singleRes.ok) {
-          throw new Error(
-            singleJson?.message || `Service "${slug}" not found`
-          );
-        }
-        rawDoc = singleJson?.data || singleJson?.service || singleJson;
-      }
-
-      const normalized = normalizeServiceDoc(rawDoc, allServices);
-      if (!normalized) {
-        throw new Error("Invalid service document received from backend.");
-      }
-
-      setService(normalized);
-    } catch (err) {
-      setService(null);
-      setError(err?.message || "Failed to load service details from backend.");
-    } finally {
-      setLoading(false);
     }
-  }, [slug]);
+
+    const allServices = Array.isArray(allJson)
+      ? allJson
+      : allJson?.data || allJson?.services || [];
+
+    let rawDoc = allServices.find(
+      (item) => item?.slug === slug || item?._id === slug
+    );
+
+    if (!rawDoc) {
+      const singleRes = await fetch(
+        `${API_BASE}/services/${encodeURIComponent(slug)}`,
+        { cache: "no-store" }
+      );
+      const singleJson = await singleRes.json().catch(() => ({}));
+      if (!singleRes.ok) {
+        throw new Error(
+          singleJson?.message || `Service "${slug}" not found`
+        );
+      }
+      rawDoc = singleJson?.data || singleJson?.service || singleJson;
+    }
+
+    const normalized = normalizeServiceDoc(rawDoc, allServices);
+    if (!normalized) {
+      throw new Error("Invalid service document received from backend.");
+    }
+
+    setService(normalized);
+  } catch (err) {
+    setService(null);
+    setError(err?.message || "Failed to load service details from backend.");
+  } finally {
+    setLoading(false);
+  }
+}, [slug]);
 
   useEffect(() => {
     fetchServiceDetail();

@@ -13,6 +13,10 @@ const servicesMeta = {
   "exopod-infrared":{ title: "Exopod Infrared Bed",   desc: "An enclosed infrared pod for a quiet, private warmth session." },
 };
 
+export function generateStaticParams() {
+  return Object.keys(servicesMeta).map((slug) => ({ slug }));
+}
+
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const meta = servicesMeta[slug] || servicesMeta.sauna;
